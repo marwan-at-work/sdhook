@@ -142,7 +142,8 @@ func (sh *StackdriverHook) Fire(entry *logrus.Entry) error {
 		var httpReq *logging.HttpRequest
 
 		// convert entry data to labels
-		labels := make(map[string]string, len(entry.Data))
+		labels := make(map[string]string, len(entry.Data)+1)
+		labels["message"] = entry.Message
 		for k, v := range entry.Data {
 			switch x := v.(type) {
 			case string:
@@ -238,20 +239,20 @@ func (sh *StackdriverHook) sendLogMessageViaAPI(entry *logrus.Entry, labels map[
 		if sh.errorReportingLogName != "" && isError(entry) {
 			logName = sh.errorReportingLogName
 		}
+
+		bts, _ := json.Marshal(labels)
+		le := &logging.LogEntry{
+			Severity:    strings.ToUpper(entry.Level.String()),
+			Timestamp:   entry.Time.Format(time.RFC3339),
+			HttpRequest: httpReq,
+			JsonPayload: bts,
+		}
+
 		_, _ = sh.service.Write(&logging.WriteLogEntriesRequest{
 			LogName:        logName,
 			Resource:       sh.resource,
-			Labels:         sh.labels,
 			PartialSuccess: sh.partialSuccess,
-			Entries: []*logging.LogEntry{
-				{
-					Severity:    strings.ToUpper(entry.Level.String()),
-					Timestamp:   entry.Time.Format(time.RFC3339),
-					TextPayload: entry.Message,
-					Labels:      labels,
-					HttpRequest: httpReq,
-				},
-			},
+			Entries:        []*logging.LogEntry{le},
 		}).Do()
 	}
 }
